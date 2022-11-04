@@ -175,32 +175,59 @@ Mat equalize_image(Mat gauss_image, unsigned long int* histogram) {
 
 // APLICAMOS FILTRO DE SOBEL A LA IMAGEN ECUALIZADA
 Mat sobel(Mat equalized_image) {
+
 	int rows = equalized_image.rows - 2;
 	int columns = equalized_image.cols - 2;
 
-	Mat G_x(rows, columns, CV_8UC1);
-	Mat abs_grad_x(rows, columns, CV_8UC1);
-	Mat G_y(rows, columns, CV_8UC1);
-	Mat abs_grad_y(rows, columns, CV_8UC1);
-	Mat sobel_image(rows, columns, CV_8UC1);
+	// DECLARAMOS LA MATRIZ PARA G_XY
+	Mat G_XY(rows, columns, CV_8UC1);
+
+	// MÁSCARA G_X
+	float** g_x = new float* [3];
+	for (int i = 0; i < 3; i++)
+		g_x[i] = new float[3];
+	g_x[0][0] = -1;
+	g_x[0][1] = 0;
+	g_x[0][2] = 1;
+	g_x[1][0] = -2;
+	g_x[1][1] = 0;
+	g_x[1][2] = 2;
+	g_x[2][0] = -1;
+	g_x[2][1] = 0;
+	g_x[2][2] = 1;
+
+	// MÁSCARA G_Y
+	float** g_y = new float* [3];
+	for (int i = 0; i < 3; i++)
+		g_y[i] = new float[3];
+	g_y[0][0] = -1;
+	g_y[0][1] = -2;
+	g_y[0][2] = -1;
+	g_y[1][0] = 0;
+	g_y[1][1] = 0;
+	g_y[1][2] = 0;
+	g_y[2][0] = 1;
+	g_y[2][1] = 2;
+	g_y[2][2] = 1;
+
+	Mat G_X = convolution(g_x, 3, equalized_image);
+	Mat G_Y = convolution(g_y, 3, equalized_image);
 
 
-	int ddepth = CV_16S;
+	// VARIABLES AUXILIARES
+	int val_pix_x = 0;
+	int val_pix_y = 0;
 
-	Sobel(equalized_image, G_x, ddepth, 1, 0);
-	
-	Sobel(equalized_image, G_y, ddepth, 0, 1);
-	convertScaleAbs(G_x, abs_grad_x);
-	convertScaleAbs(G_y, abs_grad_y);
-
-	// Suma
+	// CALCULAMOS LOS VALORES DE G_XY
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < columns; j++) {
-			sobel_image.at<uchar>(Point(i, j)) = abs_grad_x.at<uchar>(Point(i, j)) * 0.5 + abs_grad_y.at<uchar>(Point(i, j)) * 0.5;
+			val_pix_x = G_X.at<uchar>(Point(i, j));
+			val_pix_y = G_Y.at<uchar>(Point(i, j));
+			G_XY.at<uchar>(Point(i, j)) = val_pix_x * val_pix_y;
 		}
 	}
 
-	return sobel_image;
+	return G_XY;
 }
 
 
@@ -214,6 +241,7 @@ Mat canny(Mat sobel_image) {
 	Canny(sobel_image, canny_image, min_threshold, max_threshold);
 	return canny_image;
 }
+
 
 // FUNCIÓN PARA MOSTRAR IMÁGENES
 void show_images(Mat image, Mat image_gray, Mat bordered_image, Mat gauss_image, Mat equalized_image, Mat sobel_image, Mat canny_image) {
@@ -297,7 +325,7 @@ int main() {
 	Mat bord_image = bordered_image(image_gray, kernel_size);
 
 
-	// APLICAR FILTRO
+	// APLICAR FILTRO GAUSS
 	Mat gauss_image = convolution(kernel, kernel_size, bord_image);
 
 
