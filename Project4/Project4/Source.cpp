@@ -103,7 +103,7 @@ Mat convolution(float** kernel, int kernel_size, Mat bord_image)
 }
 
 
-// HISTOGRAMA
+// FUNCIÓN PARA CALCULAR HISTOGRAMA
 unsigned long int* histogram(Mat gauss_image) {
 	
 	unsigned long int h[256];
@@ -122,7 +122,7 @@ unsigned long int* histogram(Mat gauss_image) {
 }
 
 
-// ECUALIZAR IMAGEN
+// FUNCIÓN PARA ECUALIZAR IMAGEN
 Mat equalize_image(Mat gauss_image, unsigned long int* histogram) {
 
 	// VARIABLES AUXILIARES
@@ -173,15 +173,8 @@ Mat equalize_image(Mat gauss_image, unsigned long int* histogram) {
 }
 
 
-// APLICAMOS FILTRO DE SOBEL A LA IMAGEN ECUALIZADA
-Mat sobel(Mat equalized_image) {
-
-	int rows = equalized_image.rows - 2;
-	int columns = equalized_image.cols - 2;
-
-	// DECLARAMOS LA MATRIZ PARA G_XY
-	Mat G_XY(rows, columns, CV_8UC1);
-
+// FUNCIÓN PARA CALCULAR G_X
+Mat G_X_kernel(Mat equalized_image) {
 	// MÁSCARA G_X
 	float** g_x = new float* [3];
 	for (int i = 0; i < 3; i++)
@@ -195,6 +188,16 @@ Mat sobel(Mat equalized_image) {
 	g_x[2][0] = -1;
 	g_x[2][1] = 0;
 	g_x[2][2] = 1;
+
+	Mat G_X = convolution(g_x, 3, equalized_image);
+
+	return G_X;
+
+}
+
+
+// FUNCIÓN PARA CALCULAR G_Y
+Mat G_Y_kernel(Mat equalized_image) {
 
 	// MÁSCARA G_Y
 	float** g_y = new float* [3];
@@ -210,8 +213,25 @@ Mat sobel(Mat equalized_image) {
 	g_y[2][1] = 2;
 	g_y[2][2] = 1;
 
-	Mat G_X = convolution(g_x, 3, equalized_image);
+
 	Mat G_Y = convolution(g_y, 3, equalized_image);
+
+	return G_Y;
+
+}
+
+
+
+// FUNCIÓN PARA ACPLICAR EL FILTRO DE SOBEL A LA IMAGEN ECUALIZADA
+Mat sobel(Mat equalized_image) {
+
+	int rows = equalized_image.rows - 2;
+	int columns = equalized_image.cols - 2;
+
+	// DECLARAMOS LA MATRIZ PARA G_XY
+	Mat G_XY(rows, columns, CV_8UC1);	
+	Mat G_X = G_X_kernel(equalized_image);
+	Mat G_Y = G_X_kernel(equalized_image);
 
 
 	// VARIABLES AUXILIARES
@@ -223,7 +243,7 @@ Mat sobel(Mat equalized_image) {
 		for (int j = 0; j < columns; j++) {
 			val_pix_x = G_X.at<uchar>(Point(i, j));
 			val_pix_y = G_Y.at<uchar>(Point(i, j));
-			G_XY.at<uchar>(Point(i, j)) = val_pix_x * val_pix_y;
+			G_XY.at<uchar>(Point(i, j)) = sqrt(pow(val_pix_x, 2) + pow(val_pix_y, 2));
 		}
 	}
 
@@ -231,19 +251,45 @@ Mat sobel(Mat equalized_image) {
 }
 
 
-// DETECCIÓN DE BORDE DE CANNY
-Mat canny(Mat sobel_image) {
+// FUNCIÓN PARA DETECCIÓN DE BORDE DE CANNY
+Mat canny(Mat sobel_image, Mat equalized_image) {
 	int rows = sobel_image.rows;
 	int columns = sobel_image.cols;
+
+	// DECLARAMOS LA MATRIZ CANY
 	Mat canny_image(rows, columns, CV_8UC1);
-	int min_threshold = 100;
+
+	// DECLARAMOS LA MATRIZ PARA EL ÁNGULO
+	Mat angle(rows, columns, CV_8UC1);
+
+	Mat G_X = G_X_kernel(equalized_image);
+	Mat G_Y = G_X_kernel(equalized_image);
+
+	// CALCULAMOS LOS ÁNGULOS
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < columns; j++) {
+			
+			angle.at<uchar>(Point(i, j)) = atan((G_Y.at<uchar>(Point(i, j))) / (G_X.at<uchar>(Point(i, j))+1));
+		}
+	}
+
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < columns; j++) {
+
+			canny_image.at<uchar>(Point(i, j)) = angle.at<uchar>(Point(i, j)) * sobel_image.at<uchar>(Point(i, j));
+		}
+	}
+
+
+	// FUNCIÓN CANNY DE LA LIBRERÍA
+	int min_threshold = 150;
 	int max_threshold = 200;
 	Canny(sobel_image, canny_image, min_threshold, max_threshold);
 	return canny_image;
 }
 
 
-// FUNCIÓN PARA MOSTRAR IMÁGENES
+// FUNCIÓN PARA MOSTRAR IMÁGENES Y GUARDARLAS
 void show_images(Mat image, Mat image_gray, Mat bordered_image, Mat gauss_image, Mat equalized_image, Mat sobel_image, Mat canny_image) {
 
 	// IMAGEN ORIGINAL
@@ -273,6 +319,16 @@ void show_images(Mat image, Mat image_gray, Mat bordered_image, Mat gauss_image,
 	// IMAGEN CON DETECCIÓN DE BORDES CANNY
 	namedWindow("Imagen con detección de bordes", WINDOW_AUTOSIZE);
 	imshow("Imagen con detección de bordes", canny_image);
+
+
+	// GUARDAMOS LAS IMÁGENES
+	imwrite("img_original.png", image);
+	imwrite("img_gray.png", image_gray);
+	imwrite("img_borders.png", bordered_image);
+	imwrite("img_gauss.png", gauss_image);
+	imwrite("img_equalized.png", equalized_image);
+	imwrite("img_sobel.png", sobel_image);
+	imwrite("img_canny.png", canny_image);
 
 
 	// MOSTRAR EL TAMAÑO DE LAS IMÁGENES
@@ -342,7 +398,7 @@ int main() {
 
 
 	// IMAGEN CON DETECCIÓN DE BORDES CANNY
-	Mat canny_image = canny(sobel_image);
+	Mat canny_image = canny(sobel_image, equalized_image);
 
 
 	// MOSTRAR LAS IMÁGENES EN NUEVAS VENTANAS
